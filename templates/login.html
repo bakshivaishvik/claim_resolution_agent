@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Sign In | Claims Resolution Agent{% endblock %}
+{% block page_title %}Sign In{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <div class="stat-icon bg-primary text-white mx-auto mb-3" style="width:54px; height:54px; border-radius:12px;">
+                        <i class="bi bi-shield-lock fs-3"></i>
+                    </div>
+                    <h5 class="fw-bold">Sign in to Claims Resolution System</h5>
+                    <p class="text-muted small">Select a pre-configured demo identity or sign in manually.</p>
+                </div>
+
+                <div class="d-grid gap-2 mb-4">
+                    <span class="text-muted small text-uppercase fw-bold">One-Click Demonstration Roles:</span>
+                    <a href="/auth/switch-user/agent_alice" class="btn btn-outline-primary d-flex justify-content-between align-items-center p-2">
+                        <span><i class="bi bi-headset me-2"></i>Alice (Customer Service Agent)</span>
+                        <span class="badge bg-secondary">AGENT</span>
+                    </a>
+                    <a href="/auth/switch-user/approver_bob" class="btn btn-outline-primary d-flex justify-content-between align-items-center p-2">
+                        <span><i class="bi bi-check2-circle me-2"></i>Bob (Claims Approver)</span>
+                        <span class="badge bg-secondary">APPROVER</span>
+                    </a>
+                    <a href="/auth/switch-user/approver_carol" class="btn btn-outline-primary d-flex justify-content-between align-items-center p-2">
+                        <span><i class="bi bi-shield-shaded me-2"></i>Carol (Senior Risk Approver)</span>
+                        <span class="badge bg-secondary">SENIOR_APPROVER</span>
+                    </a>
+                    <a href="/auth/switch-user/admin_dave" class="btn btn-outline-primary d-flex justify-content-between align-items-center p-2">
+                        <span><i class="bi bi-key me-2"></i>Dave (System Administrator)</span>
+                        <span class="badge bg-secondary">ADMIN</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

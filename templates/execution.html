@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Refund Execution | Claims Resolution Agent{% endblock %}
+{% block page_title %}Secure Refund Execution Engine{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Left Column: Ready Claims Selector -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-list-check me-2 text-primary"></i>Ready for Execution Queue</h6>
+            </div>
+            <div class="list-group list-group-flush">
+                {% for rc in ready_claims %}
+                <a href="/execution/{{ rc.id }}" class="list-group-item list-group-item-action p-3 {% if selected_claim and selected_claim.id == rc.id %}active{% endif %}">
+                    <div class="d-flex w-100 justify-content-between align-items-center mb-1">
+                        <strong class="fs-6">{{ rc.id }}</strong>
+                        <span class="badge {% if selected_claim and selected_claim.id == rc.id %}bg-light text-dark{% else %}bg-primary{% endif %}">
+                            ${{ "%.2f"|format(rc.amount) }}
+                        </span>
+                    </div>
+                    <div class="small mb-1">{{ rc.customer_name }}</div>
+                    <small class="{% if selected_claim and selected_claim.id == rc.id %}text-light{% else %}text-muted{% endif %}">
+                        <i class="bi bi-tag me-1"></i>{{ rc.risk_category }}
+                    </small>
+                </a>
+                {% else %}
+                <div class="p-4 text-center text-muted small">
+                    <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                    No approved claims currently awaiting execution.
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Verification & Execution Panel -->
+    <div class="col-lg-8">
+        {% if selected_claim %}
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-shield-lock me-2 text-primary"></i>Pre-Flight Cryptographic Verification</h6>
+                <span class="badge bg-info text-dark">Claim: {{ selected_claim.id }}</span>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <span class="text-muted small d-block">Beneficiary Customer:</span>
+                        <strong>{{ selected_claim.customer_name }}</strong> ({{ selected_claim.customer_email }})
+                    </div>
+                    <div class="col-md-6">
+                        <span class="text-muted small d-block">Authorized Refund Amount:</span>
+                        <strong class="fs-4 text-success">${{ "%.2f"|format(selected_claim.amount) }}</strong>
+                    </div>
+                </div>
+
+                <!-- Pre-Flight Checklist -->
+                <h6 class="fw-bold mb-3">Governance Verification Checklist:</h6>
+
+                <div class="check-step {% if selected_claim.status == 'APPROVED_PENDING_EXECUTION' %}pass{% else %}fail{% endif %}">
+                    <i class="bi {% if selected_claim.status == 'APPROVED_PENDING_EXECUTION' %}bi-check-circle-fill text-success{% else %}bi-x-circle-fill text-danger{% endif %} fs-5"></i>
+                    <div class="flex-grow-1">
+                        <strong class="d-block small">1. Governed State Transition</strong>
+                        <span class="text-muted small">Claim is in approved pre-execution status: <code>{{ selected_claim.status }}</code></span>
+                    </div>
+                </div>
+
+                <div class="check-step {% if selected_claim.risk_category == 'ROUTINE' or (token_status and token_status.valid) %}pass{% else %}fail{% endif %}">
+                    <i class="bi {% if selected_claim.risk_category == 'ROUTINE' or (token_status and token_status.valid) %}bi-check-circle-fill text-success{% else %}bi-x-circle-fill text-danger{% endif %} fs-5"></i>
+                    <div class="flex-grow-1">
+                        <strong class="d-block small">2. Cryptographic HMAC-SHA256 Token Signature</strong>
+                        <span class="text-muted small">
+                            {% if selected_claim.risk_category == 'ROUTINE' %}
+                                Routine policy POL-101 qualifies for automated signature bypass.
+                            {% elif token_status and token_status.valid %}
+                                Verified constant-time HMAC signature matches authorization secret key.
+                            {% else %}
+                                Signature invalid or token not found: {{ token_status.reason if token_status else 'No Token' }}
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="check-step {% if token_status and token_status.valid %}pass{% elif selected_claim.risk_category == 'ROUTINE' %}pass{% else %}fail{% endif %}">
+                    <i class="bi {% if token_status and token_status.valid or selected_claim.risk_category == 'ROUTINE' %}bi-check-circle-fill text-success{% else %}bi-x-circle-fill text-danger{% endif %} fs-5"></i>
+                    <div class="flex-grow-1">
+                        <strong class="d-block small">3. Payload Hash Parity (Anti-Tampering Lock)</strong>
+                        <span class="text-muted small">
+                            Current Claim Hash: <code class="small">{{ selected_claim.payload_hash[:16] }}...</code> &bull; 
+                            Token Hash: <code class="small">{{ token_status.payload.payload_hash[:16] if token_status and token_status.payload else 'N/A' }}...</code>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="check-step {% if selected_claim.risk_category != 'FOUR_EYES' or (selected_claim.approvals|length >= 2 and selected_claim.approvals[0].approver_username != selected_claim.approvals[1].approver_username) %}pass{% else %}fail{% endif %}">
+                    <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                    <div class="flex-grow-1">
+                        <strong class="d-block small">4. Multi-Party / Four-Eyes Distinctness</strong>
+                        <span class="text-muted small">
+                            {% if selected_claim.risk_category == 'FOUR_EYES' %}
+                                Dual approvers verified distinct: <code>{{ selected_claim.approvals[0].approver_username if selected_claim.approvals else '' }}</code> &amp; <code>{{ selected_claim.approvals[1].approver_username if selected_claim.approvals|length > 1 else '' }}</code>.
+                            {% else %}
+                                Single approver or routine threshold satisfied.
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="check-step pass">
+                    <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                    <div class="flex-grow-1">
+                        <strong class="d-block small">5. Idempotency Key Lock</strong>
+                        <span class="text-muted small">Assigned unique idempotency key: <code>{{ selected_claim.idempotency_key }}</code></span>
+                    </div>
+                </div>
+
+                <!-- Execution Form -->
+                <div class="p-4 bg-light rounded border mt-4">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-uppercase">Execution Idempotency Key</label>
+                        <input type="text" id="idempotencyKeyInput" class="form-control font-monospace" value="{{ selected_claim.idempotency_key }}">
+                        <div class="form-text small">Ensures payment gateways and local execution ledger never duplicate payouts on network retries.</div>
+                    </div>
+
+                    {% if selected_claim.status == 'APPROVED_PENDING_EXECUTION' %}
+                        <button id="executeRefundBtn" class="btn btn-success btn-lg w-100 py-3 fw-bold" onclick="executeRefundAction('{{ selected_claim.id }}')">
+                            <i class="bi bi-shield-check me-2"></i>Execute Governed Refund of ${{ "%.2f"|format(selected_claim.amount) }}
+                        </button>
+                    {% elif selected_claim.status == 'REFUNDED' %}
+                        <div class="alert alert-success d-flex align-items-center mb-0">
+                            <i class="bi bi-check-circle-fill fs-3 me-3"></i>
+                            <div>
+                                <h6 class="alert-heading fw-bold mb-1">Claim Successfully Refunded</h6>
+                                <p class="mb-0 small">This claim was finalized, tokens consumed, and disbursement permanently logged into the hash-chained audit ledger.</p>
+                            </div>
+                        </div>
+                    {% else %}
+                        <button class="btn btn-secondary btn-lg w-100 py-3 disabled" disabled>
+                            <i class="bi bi-lock me-2"></i>Execution Blocked: Requires Governed Approval
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="card shadow-sm border-0 p-5 text-center text-muted">
+            <i class="bi bi-shield-shaded fs-1 d-block mb-3 text-primary"></i>
+            <h5>No Claim Selected</h5>
+            <p>Select an approved refund claim from the left queue to verify cryptographic parameters and execute disbursement.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

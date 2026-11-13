@@ -1,0 +1,20 @@
+services:
+  claims-resolution-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: claims_resolution_agent
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - FLASK_DEBUG=False
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_MODEL=${GROQ_MODEL:-llama-3.3-70b-versatile}
+      - HMAC_SECRET_KEY=${HMAC_SECRET_KEY:-governed-claims-agent-hmac-sec-token-2026}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-governed-claims-agent-jwt-sec-token-2026}
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-governed-claims-agent-flask-secret-key-2026}
+    volumes:
+      - ./data:/app/data
+      - ./ledger:/app/ledger
+    restart: unless-stopped

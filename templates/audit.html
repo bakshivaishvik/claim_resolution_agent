@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Ledger | Claims Resolution Agent{% endblock %}
+{% block page_title %}Hash-Chained Audit Ledger{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <p class="text-muted mb-0">Immutable, hash-chained ledger recording every claim lifecycle event, authorization signature, and refund disbursement.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <button id="verifyLedgerBtn" class="btn btn-primary" onclick="verifyLedgerAction()">
+            <i class="bi bi-patch-check me-1"></i> Verify Ledger Integrity
+        </button>
+        <button class="btn btn-outline-danger" onclick="tamperLedgerAction()" title="Demonstrate Tamper Detection">
+            <i class="bi bi-shield-slash me-1"></i> Simulate Tamper
+        </button>
+        <button class="btn btn-outline-secondary" onclick="resetLedgerAction()" title="Restore Pristine Baseline">
+            <i class="bi bi-arrow-counterclockwise me-1"></i> Reset Ledger
+        </button>
+    </div>
+</div>
+
+<!-- Ledger Verification Banner -->
+<div id="ledgerStatusBanner" class="alert {% if verification.is_valid %}alert-success{% else %}alert-danger{% endif %} d-flex align-items-center mb-4">
+    <i class="bi {% if verification.is_valid %}bi-check-circle-fill text-success{% else %}bi-exclamation-triangle-fill text-danger{% endif %} fs-4 me-3"></i>
+    <div>
+        <strong class="d-block">
+            {% if verification.is_valid %}
+                Cryptographic Integrity Verified: Hash Chain Intact
+            {% else %}
+                INTEGRITY VIOLATION DETECTED: Tampered Sequence Block
+            {% endif %}
+        </strong>
+        <span class="small">{{ verification.message }}</span>
+    </div>
+</div>
+
+<!-- Ledger Explorer Card -->
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-database-lock me-2 text-primary"></i>Audit Log Stream (<code>audit.jsonl</code>)</h6>
+        <span class="badge bg-light text-dark border">{{ entries|length }} Total Hash Blocks</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table custom-table align-middle font-monospace small mb-0">
+                <thead>
+                    <tr>
+                        <th style="width: 70px;">Seq</th>
+                        <th style="width: 180px;">Timestamp</th>
+                        <th>Claim ID</th>
+                        <th>Action</th>
+                        <th>Amount</th>
+                        <th>Actor</th>
+                        <th>Previous Hash (SHA-256)</th>
+                        <th>Current Hash (SHA-256)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in entries|reverse %}
+                    <tr class="{% if not verification.is_valid and verification.failed_at_seq == entry.seq %}table-danger border-danger{% endif %}">
+                        <td><span class="badge bg-dark">#{{ entry.seq }}</span></td>
+                        <td><span class="text-muted">{{ entry.timestamp[:19] }}</span></td>
+                        <td>
+                            <a href="/claims/{{ entry.claim_id }}" class="fw-bold text-decoration-none font-sans">{{ entry.claim_id }}</a>
+                        </td>
+                        <td>
+                            {% if entry.action == 'REFUND_EXECUTED' %}
+                                <span class="badge bg-success font-sans">REFUND_EXECUTED</span>
+                            {% elif 'APPROVAL' in entry.action %}
+                                <span class="badge bg-primary font-sans">{{ entry.action }}</span>
+                            {% elif entry.action == 'CLAIM_REJECTED' %}
+                                <span class="badge bg-danger font-sans">CLAIM_REJECTED</span>
+                            {% elif entry.action == 'AI_ANALYZED' %}
+                                <span class="badge bg-info text-dark font-sans">AI_ANALYZED</span>
+                            {% else %}
+                                <span class="badge bg-secondary font-sans">{{ entry.action }}</span>
+                            {% endif %}
+                        </td>
+                        <td><strong>${{ "%.2f"|format(entry.amount) }}</strong></td>
+                        <td>
+                            <span>{{ entry.actor }}</span>
+                            <small class="badge bg-light text-muted border ms-1">{{ entry.actor_role }}</small>
+                        </td>
+                        <td>
+                            <span class="hash-pill" title="{{ entry.prev_hash }}">
+                                {{ entry.prev_hash[:16] }}...
+                            </span>
+                        </td>
+                        <td>
+                            <span class="hash-pill" style="color: #2563eb; background: #eff6ff; border-color: #bfdbfe;" title="{{ entry.curr_hash }}">
+                                {{ entry.curr_hash[:16] }}...
+                            </span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center py-4 text-muted">No audit ledger entries present.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

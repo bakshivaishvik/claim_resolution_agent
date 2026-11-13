@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Deployment & Evaluation | Claims Resolution Agent{% endblock %}
+{% block page_title %}Governance Evaluation & Deployment Gate{% endblock %}
+
+{% block content %}
+<!-- Stage Overview Header -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+            <span class="text-muted small text-uppercase fw-bold d-block mb-1">Current Governed Deployment Stage</span>
+            <div class="d-flex align-items-center gap-3">
+                {% if status.stage == 'PRODUCTION' %}
+                    <span class="badge bg-success fs-4 px-3 py-2"><i class="bi bi-rocket-takeoff-fill me-2"></i>PRODUCTION</span>
+                {% elif status.stage == 'STAGED' %}
+                    <span class="badge bg-primary fs-4 px-3 py-2"><i class="bi bi-layers-fill me-2"></i>STAGED</span>
+                {% elif status.stage == 'CANARY' %}
+                    <span class="badge bg-warning text-dark fs-4 px-3 py-2"><i class="bi bi-soundwave me-2"></i>CANARY</span>
+                {% else %}
+                    <span class="badge bg-danger fs-4 px-3 py-2"><i class="bi bi-slash-circle-fill me-2"></i>DEMOTED</span>
+                {% endif %}
+                <span class="text-muted small">
+                    Last Evaluated: <strong>{{ status.last_evaluated_at[:19] if status.last_evaluated_at else 'Initial Staging' }}</strong> &bull;
+                    By: <strong>{{ status.updated_by or 'System' }}</strong>
+                </span>
+            </div>
+            <p class="text-muted small mb-0 mt-2">{{ status.notes }}</p>
+        </div>
+
+        <div class="d-flex align-items-center gap-2">
+            <button id="runGateBtn" class="btn btn-primary" onclick="runDeploymentGateAction()">
+                <i class="bi bi-clipboard-check me-1"></i> Run Deployment Gate Evaluation
+            </button>
+
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-arrow-up-circle me-1"></i> Stage Controls
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                    <li><h6 class="dropdown-header">Promote Stage (Subject to Gate):</h6></li>
+                    <li><a class="dropdown-item" href="javascript:void(0)" onclick="promoteDeploymentStage('CANARY')"><i class="bi bi-circle-fill text-warning me-2 small"></i>Promote to CANARY</a></li>
+                    <li><a class="dropdown-item" href="javascript:void(0)" onclick="promoteDeploymentStage('STAGED')"><i class="bi bi-circle-fill text-primary me-2 small"></i>Promote to STAGED</a></li>
+                    <li><a class="dropdown-item fw-bold text-success" href="javascript:void(0)" onclick="promoteDeploymentStage('PRODUCTION')"><i class="bi bi-rocket-takeoff text-success me-2"></i>Promote to PRODUCTION</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item text-danger" href="javascript:void(0)" onclick="demoteDeploymentStage()"><i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>Emergency Demote</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Golden Set Evaluation Report -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-collection me-2 text-primary"></i>Golden Evaluation Suite: 5 Scenarios across 2 Prompt Configurations</h6>
+        <span class="badge bg-success">Governance Containment: {{ golden_results.governance_containment_rate }}%</span>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="p-3 bg-light rounded border text-center">
+                    <span class="text-muted small d-block">Config A (Policy-Guided AI)</span>
+                    <strong class="fs-4 text-primary">{{ golden_results.config_a_accuracy }}%</strong>
+                    <div class="small text-muted mt-1">Prompt with risk instructions</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 bg-light rounded border text-center">
+                    <span class="text-muted small d-block">Config B (Direct Unconstrained)</span>
+                    <strong class="fs-4 text-warning">{{ golden_results.config_b_accuracy }}%</strong>
+                    <div class="small text-muted mt-1">Vulnerable to injection prompts</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 bg-light rounded border text-center">
+                    <span class="text-muted small d-block">Deterministic Governance Safety</span>
+                    <strong class="fs-4 text-success">{{ golden_results.governance_containment_rate }}%</strong>
+                    <div class="small text-muted mt-1">100% Policy Override & Containment</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table custom-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Scenario ID</th>
+                        <th>Name</th>
+                        <th>Amount</th>
+                        <th>Expected Ground Truth</th>
+                        <th>Config A Suggestion</th>
+                        <th>Config B Suggestion</th>
+                        <th>Deterministic Governance Authority</th>
+                        <th>Containment</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sc in golden_results.scenarios %}
+                    <tr>
+                        <td><span class="badge bg-dark font-monospace">{{ sc.scenario_id }}</span></td>
+                        <td><strong>{{ sc.name }}</strong></td>
+                        <td>${{ "%.2f"|format(sc.amount) }}</td>
+                        <td><span class="badge bg-secondary">{{ sc.expected_risk }}</span></td>
+                        <td>
+                            <span class="badge {% if sc.config_a_match %}bg-success{% else %}bg-danger{% endif %}">
+                                {{ sc.config_a_suggestion }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge {% if sc.config_b_match %}bg-success{% else %}bg-warning text-dark{% endif %}">
+                                {{ sc.config_b_suggestion }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge bg-primary fs-6">{{ sc.governed_decision }}</span>
+                            <small class="text-muted d-block font-monospace">{{ sc.governed_clause }}</small>
+                        </td>
+                        <td>
+                            {% if sc.governance_safeguard_active %}
+                                <span class="badge bg-warning text-dark"><i class="bi bi-shield-lock me-1"></i>Override Guardrail</span>
+                            {% else %}
+                                <span class="badge bg-success bg-opacity-10 text-success"><i class="bi bi-check me-1"></i>Aligned</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

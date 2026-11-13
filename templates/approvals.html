@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Approval Center | Claims Resolution Agent{% endblock %}
+{% block page_title %}Governance Approval Center{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <p class="text-muted mb-0">Review pending refund requests requiring certified human authorization and cryptographic sign-off.</p>
+    </div>
+    <div class="badge bg-light text-dark border p-2">
+        <i class="bi bi-person-check me-1 text-primary"></i> Acting as: <strong>{{ current_user.full_name }}</strong> ({{ current_user.role }})
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white border-bottom py-3">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-hourglass-split me-2 text-warning"></i>Pending Approval Queue</h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table custom-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Claim ID</th>
+                        <th>Customer</th>
+                        <th>Item Details</th>
+                        <th>Amount</th>
+                        <th>Required Workflow</th>
+                        <th>Workflow Progress</th>
+                        <th>Sign-off Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in pending_claims %}
+                    <tr>
+                        <td>
+                            <a href="/claims/{{ c.id }}" class="fw-bold text-decoration-none text-primary">{{ c.id }}</a>
+                            <div class="small text-muted">{{ c.reason }}</div>
+                        </td>
+                        <td>
+                            <div class="fw-semibold">{{ c.customer_name }}</div>
+                            <small class="text-muted">Tenure: {{ c.account_age_days }}d | Risk: {{ c.customer_risk_score }}</small>
+                        </td>
+                        <td>
+                            <div>{{ c.item_name }}</div>
+                            <small class="badge bg-light text-dark border">{{ c.item_category }}</small>
+                        </td>
+                        <td><strong class="fs-6">${{ "%.2f"|format(c.amount) }}</strong></td>
+                        <td>
+                            {% if c.risk_category == 'SINGLE_APPROVAL' %}
+                                <span class="badge badge-single mb-1 d-inline-block">SINGLE_APPROVAL</span>
+                                <small class="d-block text-muted">1 Certified Approver</small>
+                            {% elif c.risk_category == 'FOUR_EYES' %}
+                                <span class="badge badge-four-eyes mb-1 d-inline-block">FOUR_EYES (DUAL)</span>
+                                <small class="d-block text-muted">2 Distinct Approvers</small>
+                            {% else %}
+                                <span class="badge bg-secondary mb-1 d-inline-block">{{ c.risk_category }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if c.risk_category == 'FOUR_EYES' %}
+                                {% if c.status == 'PENDING_APPROVAL_STEP1' %}
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge bg-warning text-dark">Step 1 of 2</span>
+                                        <small class="text-muted">Awaiting 1st review</small>
+                                    </div>
+                                {% elif c.status == 'PENDING_APPROVAL_STEP2' %}
+                                    <div class="d-flex flex-column gap-1">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="badge bg-info text-dark">Step 2 of 2</span>
+                                            <small class="text-success fw-bold"><i class="bi bi-check-circle me-1"></i>Step 1 Signed</small>
+                                        </div>
+                                        {% if c.approvals %}
+                                            <small class="text-muted">1st Signer: <strong>{{ c.approvals[0].approver_username }}</strong></small>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge bg-warning text-dark">Step 1 of 1</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex gap-2">
+                                {% if c.status == 'PENDING_APPROVAL_STEP1' %}
+                                    <button class="btn btn-sm btn-success" onclick="handleApproval('{{ c.id }}', 'APPROVED', 1)">
+                                        <i class="bi bi-check-lg me-1"></i>Sign Step 1
+                                    </button>
+                                {% elif c.status == 'PENDING_APPROVAL_STEP2' %}
+                                    <!-- Enforce distinct approver warning in UI -->
+                                    {% if c.approvals and c.approvals[0].approver_username == current_user.username %}
+                                        <button class="btn btn-sm btn-outline-secondary disabled" title="Four-Eyes violation: Cannot approve both steps!">
+                                            <i class="bi bi-lock me-1"></i>Collusion Locked
+                                        </button>
+                                    {% else %}
+                                        <button class="btn btn-sm btn-primary" onclick="handleApproval('{{ c.id }}', 'APPROVED', 2)">
+                                            <i class="bi bi-shield-check me-1"></i>Sign Step 2 (Final)
+                                        </button>
+                                    {% endif %}
+                                {% endif %}
+
+                                <button class="btn btn-sm btn-outline-danger" onclick="handleApproval('{{ c.id }}', 'REJECTED', 1)">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                                <a href="/claims/{{ c.id }}" class="btn btn-sm btn-outline-secondary">Inspect</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            <i class="bi bi-check2-circle fs-1 text-success d-block mb-2"></i>
+                            All approval queues are clear! No pending claims require sign-off.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

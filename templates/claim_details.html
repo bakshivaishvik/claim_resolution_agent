@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}Claim Details {{ claim.id }} | Claims Resolution Agent{% endblock %}
+{% block page_title %}Claim Audit & Analysis: {{ claim.id }}{% endblock %}
+
+{% block content %}
+<!-- Claim Header Bar -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="fs-4 fw-bold">{{ claim.id }}</span>
+                {% if claim.status == 'REFUNDED' %}
+                    <span class="badge badge-refunded fs-6"><i class="bi bi-check-circle me-1"></i>REFUNDED</span>
+                {% elif 'PENDING' in claim.status %}
+                    <span class="badge badge-pending fs-6"><i class="bi bi-clock me-1"></i>{{ claim.status }}</span>
+                {% elif claim.status == 'REJECTED' %}
+                    <span class="badge badge-rejected fs-6"><i class="bi bi-x-circle me-1"></i>REJECTED</span>
+                {% elif claim.status == 'APPROVED_PENDING_EXECUTION' %}
+                    <span class="badge bg-info text-dark fs-6"><i class="bi bi-shield-check me-1"></i>APPROVED (READY FOR EXECUTION)</span>
+                {% else %}
+                    <span class="badge bg-secondary fs-6">{{ claim.status }}</span>
+                {% endif %}
+
+                {% if claim.risk_category == 'ROUTINE' %}
+                    <span class="badge badge-routine fs-6">ROUTINE</span>
+                {% elif claim.risk_category == 'SINGLE_APPROVAL' %}
+                    <span class="badge badge-single fs-6">SINGLE_APPROVAL</span>
+                {% elif claim.risk_category == 'FOUR_EYES' %}
+                    <span class="badge badge-four-eyes fs-6">FOUR_EYES</span>
+                {% else %}
+                    <span class="badge badge-tier-decline fs-6">TIER_DECLINE</span>
+                {% endif %}
+            </div>
+            <div class="text-muted small">
+                <span>Created: {{ claim.created_at }}</span> &bull; 
+                <span>Idempotency Key: <code>{{ claim.idempotency_key or 'N/A' }}</code></span>
+            </div>
+            <div class="mt-2">
+                <span class="small text-muted me-1">Payload SHA-256:</span>
+                <span class="hash-pill" style="max-width:320px;" title="{{ claim.payload_hash }}">{{ claim.payload_hash }}</span>
+            </div>
+        </div>
+
+        <div class="d-flex align-items-center gap-2">
+            <button id="triggerAiBtn" class="btn btn-outline-primary" onclick="triggerAIAnalysis('{{ claim.id }}')">
+                <i class="bi bi-cpu me-1"></i> Re-Run AI Analysis
+            </button>
+            {% if 'PENDING_APPROVAL' in claim.status %}
+                <a href="{{ url_for('main.approvals_page') }}" class="btn btn-warning text-dark">
+                    <i class="bi bi-person-check me-1"></i> Sign-off in Approvals
+                </a>
+            {% elif claim.status == 'APPROVED_PENDING_EXECUTION' %}
+                <a href="/execution/{{ claim.id }}" class="btn btn-success">
+                    <i class="bi bi-shield-check me-1"></i> Execute Governed Refund
+                </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Details Grid -->
+<div class="row g-4 mb-4">
+    <!-- Customer Profile -->
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-person-badge me-2 text-primary"></i>Customer Risk Profile</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="stat-icon bg-light text-primary fs-3">
+                        <i class="bi bi-person"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-0 fw-bold">{{ claim.customer_name }}</h6>
+                        <small class="text-muted">{{ claim.customer_email }} (ID: {{ claim.customer_id }})</small>
+                    </div>
+                    {% if claim.customer_is_flagged %}
+                        <span class="badge bg-danger ms-auto"><i class="bi bi-flag-fill me-1"></i>Flagged Fraud Risk</span>
+                    {% else %}
+                        <span class="badge bg-success bg-opacity-10 text-success ms-auto">Verified Account</span>
+                    {% endif %}
+                </div>
+
+                <div class="row g-2 pt-2 border-top">
+                    <div class="col-6">
+                        <span class="text-muted small d-block">Account Tenure:</span>
+                        <strong>{{ claim.account_age_days }} days</strong>
+                    </div>
+                    <div class="col-6">
+                        <span class="text-muted small d-block">Risk Metric:</span>
+                        <strong class="{% if claim.customer_risk_score > 0.6 %}text-danger{% elif claim.customer_risk_score > 0.25 %}text-warning{% else %}text-success{% endif %}">
+                            {{ claim.customer_risk_score }} / 1.00
+                        </strong>
+                    </div>
+                    <div class="col-6">
+                        <span class="text-muted small d-block">Total Purchase Orders:</span>
+                        <strong>{{ claim.total_orders }} orders</strong>
+                    </div>
+                    <div class="col-6">
+                        <span class="text-muted small d-block">Historical Refunds:</span>
+                        <strong>{{ claim.total_refunds_count }} (${{ "%.2f"|format(claim.total_refunds_amount) }})</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transaction Context -->
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-cart-check me-2 text-primary"></i>Purchase & Dispute Context</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <h6 class="mb-0 fw-bold">{{ claim.item_name }}</h6>
+                        <small class="badge bg-light text-dark border">{{ claim.item_category }}</small>
+                    </div>
+                    <div class="text-end">
+                        <span class="text-muted small d-block">Disputed Amount</span>
+                        <span class="fs-4 fw-bold text-primary">${{ "%.2f"|format(claim.amount) }}</span>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-light rounded border mb-3">
+                    <span class="text-muted small d-block mb-1 fw-bold">Customer Dispute Statement:</span>
+                    <p class="mb-0 small fst-italic">"{{ claim.description }}"</p>
+                </div>
+
+                <div class="row g-2 small text-muted border-top pt-2">
+                    <div class="col-6">Txn ID: <strong>{{ claim.transaction_id }}</strong></div>
+                    <div class="col-6">Purchased: <strong>{{ claim.purchase_date[:10] if claim.purchase_date else 'Recent' }}</strong></div>
+                    <div class="col-6">Method: <strong>{{ claim.payment_method }}</strong></div>
+                    <div class="col-6">Reason Code: <span class="badge bg-secondary">{{ claim.reason }}</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Comparison Section: AI Recommendation vs Deterministic Policy Governance -->
+<div class="row g-4 mb-4">
+    <!-- Card 1: AI Qualitative Analysis -->
+    <div class="col-lg-6">
+        <div class="side-card side-card-ai p-4 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-stars me-2 text-info"></i>Module 2: AI-Powered Risk Analysis
+                </h5>
+                <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-2 py-1">
+                    Advisory Recommendation Only
+                </span>
+            </div>
+
+            {% if claim.ai_analysis %}
+                <div class="mb-3">
+                    <span class="text-muted small fw-bold text-uppercase d-block mb-1">Executive Summary:</span>
+                    <p class="p-3 rounded bg-light border small mb-0">{{ claim.ai_analysis.summary }}</p>
+                </div>
+
+                <div class="mb-3">
+                    <span class="text-muted small fw-bold text-uppercase d-block mb-2">Detected Risk Indicators:</span>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for ind in risk_indicators %}
+                            <span class="badge bg-light text-dark border p-2 small">
+                                <i class="bi bi-exclamation-circle text-warning me-1"></i>{{ ind }}
+                            </span>
+                        {% else %}
+                            <span class="text-muted small">No specific anomalies detected.</span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <span class="text-muted small fw-bold text-uppercase d-block">AI Suggested Risk:</span>
+                        {% if claim.ai_analysis.suggested_category == 'ROUTINE' %}
+                            <span class="badge badge-routine fs-6">{{ claim.ai_analysis.suggested_category }}</span>
+                        {% elif claim.ai_analysis.suggested_category == 'SINGLE_APPROVAL' %}
+                            <span class="badge badge-single fs-6">{{ claim.ai_analysis.suggested_category }}</span>
+                        {% elif claim.ai_analysis.suggested_category == 'FOUR_EYES' %}
+                            <span class="badge badge-four-eyes fs-6">{{ claim.ai_analysis.suggested_category }}</span>
+                        {% else %}
+                            <span class="badge badge-tier-decline fs-6">{{ claim.ai_analysis.suggested_category }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="col-6">
+                        <span class="text-muted small fw-bold text-uppercase d-block">Inference Engine:</span>
+                        <small class="badge bg-light text-muted border">{{ claim.ai_analysis.model_used }}</small>
+                    </div>
+                </div>
+
+                <div>
+                    <span class="text-muted small fw-bold text-uppercase d-block mb-1">AI Reasoning:</span>
+                    <p class="small text-muted mb-0">{{ claim.ai_analysis.explanation }}</p>
+                </div>
+            {% else %}
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-cpu fs-1 d-block mb-3 text-info"></i>
+                    <p class="mb-3">No AI analysis generated yet for this claim.</p>
+                    <button class="btn btn-primary btn-sm" onclick="triggerAIAnalysis('{{ claim.id }}')">
+                        <i class="bi bi-play-circle me-1"></i> Run Groq AI Analysis Now
+                    </button>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Card 2: Deterministic Policy Retrieval (Hard Governance Authority) -->
+    <div class="col-lg-6">
+        <div class="side-card side-card-gov p-4 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-bank me-2 text-primary"></i>Module 3: Policy Retrieval & Decision
+                </h5>
+                <span class="badge bg-primary px-2 py-1">
+                    Deterministic Authority
+                </span>
+            </div>
+
+            <!-- Policy Clause Display -->
+            <div class="p-3 rounded bg-light border mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="badge bg-dark">{{ claim.policy_clause_id or 'POL-RETRIEVED' }}</span>
+                    <span class="text-muted small fw-bold">Effective Policy Version: 2.4.0</span>
+                </div>
+                <h6 class="fw-bold text-primary mb-1">{{ policy_clause.name if policy_clause else 'Codified Governance Rule' }}</h6>
+                <p class="small text-muted mb-0">{{ claim.policy_clause_text }}</p>
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-6">
+                    <span class="text-muted small fw-bold text-uppercase d-block">Governed Risk Category:</span>
+                    {% if claim.risk_category == 'ROUTINE' %}
+                        <span class="badge badge-routine fs-6">ROUTINE</span>
+                    {% elif claim.risk_category == 'SINGLE_APPROVAL' %}
+                        <span class="badge badge-single fs-6">SINGLE_APPROVAL</span>
+                    {% elif claim.risk_category == 'FOUR_EYES' %}
+                        <span class="badge badge-four-eyes fs-6">FOUR_EYES</span>
+                    {% else %}
+                        <span class="badge badge-tier-decline fs-6">TIER_DECLINE</span>
+                    {% endif %}
+                </div>
+                <div class="col-6">
+                    <span class="text-muted small fw-bold text-uppercase d-block">Required Approvers:</span>
+                    <strong class="fs-6">
+                        {% if claim.risk_category == 'ROUTINE' %}
+                            0 (Automated / Self-Service)
+                        {% elif claim.risk_category == 'SINGLE_APPROVAL' %}
+                            1 Certified Approver
+                        {% elif claim.risk_category == 'FOUR_EYES' %}
+                            2 Distinct Approvers
+                        {% else %}
+                            Permanently Barred
+                        {% endif %}
+                    </strong>
+                </div>
+            </div>
+
+            <!-- Governance Rule Safety Containment Notice -->
+            {% if claim.ai_analysis and claim.ai_analysis.suggested_category != claim.risk_category %}
+                <div class="alert alert-warning d-flex align-items-center small mb-3">
+                    <i class="bi bi-shield-exclamation fs-4 me-2"></i>
+                    <div>
+                        <strong>Governance Safeguard Triggered:</strong> AI recommended <code>{{ claim.ai_analysis.suggested_category }}</code>, but deterministic policy engine overrode it to <code>{{ claim.risk_category }}</code> based on financial and fraud limits.
+                    </div>
+                </div>
+            {% else %}
+                <div class="alert alert-success d-flex align-items-center small mb-3">
+                    <i class="bi bi-shield-check fs-4 me-2"></i>
+                    <div>
+                        <strong>Harmonized Governance:</strong> AI qualitative risk scoring aligns with codified deterministic policy constraints.
+                    </div>
+                </div>
+            {% endif %}
+
+            <div class="border-top pt-3">
+                <span class="text-muted small fw-bold text-uppercase d-block mb-1">Execution Authority Rule:</span>
+                <p class="small text-muted mb-0">
+                    AI models are strictly forbidden from executing transactions or issuing payouts directly. All payouts require cryptographic HMAC verification and token consumption.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Approvals History for this Claim -->
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white border-bottom py-3">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-key me-2 text-primary"></i>Cryptographic Sign-off History</h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table custom-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Step</th>
+                        <th>Approver</th>
+                        <th>Role</th>
+                        <th>Decision</th>
+                        <th>Signed Token (HMAC-SHA256)</th>
+                        <th>Expires</th>
+                        <th>Token Consumed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for app in claim.approvals %}
+                    <tr>
+                        <td><span class="badge bg-light text-dark border">Step {{ app.step }}</span></td>
+                        <td><strong>{{ app.approver_username }}</strong></td>
+                        <td><span class="badge bg-secondary">{{ app.approver_role }}</span></td>
+                        <td><span class="badge bg-success">{{ app.decision }}</span></td>
+                        <td><span class="hash-pill" title="{{ app.approval_token }}">{{ app.approval_token[:24] }}...</span></td>
+                        <td><small class="text-muted">{{ app.expires_at[:19] }}</small></td>
+                        <td>
+                            {% if app.is_consumed %}
+                                <span class="badge bg-danger">CONSUMED (REPLAY LOCKED)</span>
+                            {% else %}
+                                <span class="badge bg-success">ACTIVE & UNCONSUMED</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">
+                            No approval signoffs recorded yet for this claim.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

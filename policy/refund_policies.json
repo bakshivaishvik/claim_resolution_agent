@@ -1,0 +1,65 @@
+{
+  "version": "2.4.0",
+  "effective_date": "2026-01-01",
+  "governance_body": "Claims Risk & Fraud Control Committee",
+  "policies": [
+    {
+      "clause_id": "POL-101",
+      "name": "Routine Low-Value Auto-Resolution",
+      "risk_category": "ROUTINE",
+      "max_amount": 50.00,
+      "min_account_age_days": 30,
+      "max_recent_refunds_30d": 1,
+      "max_customer_risk_score": 0.25,
+      "approval_requirement": "NONE",
+      "approvers_needed": 0,
+      "eligible_reasons": ["DAMAGED_ITEM", "DEFECTIVE", "WRONG_ITEM", "ACCIDENTAL_PURCHASE"],
+      "description": "Refund requests under or equal to $50.00 for verified customers with low historical risk score (<=0.25) and no more than 1 refund in the past 30 days qualify for routine processing without managerial sign-off."
+    },
+    {
+      "clause_id": "POL-201",
+      "name": "Standard Dispute Single-Signoff",
+      "risk_category": "SINGLE_APPROVAL",
+      "min_amount": 50.01,
+      "max_amount": 250.00,
+      "min_account_age_days": 14,
+      "max_recent_refunds_30d": 2,
+      "max_customer_risk_score": 0.50,
+      "approval_requirement": "SINGLE_APPROVAL",
+      "approvers_needed": 1,
+      "eligible_roles": ["APPROVER", "SENIOR_APPROVER", "ADMIN"],
+      "description": "Claims between $50.01 and $250.00, or claims from accounts with moderate risk scores (<=0.50), mandate review and cryptographic digital authorization by one certified Approver."
+    },
+    {
+      "clause_id": "POL-301",
+      "name": "High-Value Four-Eyes Dual-Authorization",
+      "risk_category": "FOUR_EYES",
+      "min_amount": 250.01,
+      "max_amount": 1500.00,
+      "approval_requirement": "FOUR_EYES",
+      "approvers_needed": 2,
+      "requires_distinct_approvers": true,
+      "eligible_roles_step1": ["APPROVER", "SENIOR_APPROVER", "ADMIN"],
+      "eligible_roles_step2": ["SENIOR_APPROVER", "ADMIN"],
+      "description": "Refund claims between $250.01 and $1,500.00, or involving sensitive high-risk merchandise, strictly mandate dual independent authorization under the Four-Eyes principle. The two approvers must be distinct individuals, with the final signoff provided by a Senior Approver or Administrator."
+    },
+    {
+      "clause_id": "POL-401",
+      "name": "Tier Decline Hard-Limit & Fraud Exclusion",
+      "risk_category": "TIER_DECLINE",
+      "threshold_amount": 1500.00,
+      "approval_requirement": "BLOCKED",
+      "approvers_needed": 0,
+      "description": "Claims exceeding $1,500.00, claims on accounts less than 7 days old exceeding $200.00, customers with chronic dispute flags (>3 recent refunds or risk >0.70), or suspicious fraud patterns are strictly barred from refund approval. System automatically enforces Tier Decline."
+    },
+    {
+      "clause_id": "POL-501",
+      "name": "Time-Barred Purchase Window Exclusion",
+      "risk_category": "TIER_DECLINE",
+      "max_claim_window_days": 60,
+      "approval_requirement": "BLOCKED",
+      "approvers_needed": 0,
+      "description": "Claims initiated more than 60 days following the transaction date are time-barred by statutory terms of service and must be declined."
+    }
+  ]
+}

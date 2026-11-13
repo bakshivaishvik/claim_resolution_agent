@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | Claims Resolution Agent{% endblock %}
+{% block page_title %}Governance & Claims Dashboard{% endblock %}
+
+{% block content %}
+<!-- Metrics Row -->
+<div class="row g-3 mb-4">
+    <div class="col-xl-3 col-sm-6">
+        <div class="stat-card d-flex align-items-center justify-content-between">
+            <div>
+                <div class="stat-label">Total Claims</div>
+                <div class="stat-val text-primary">{{ total_claims }}</div>
+                <div class="text-muted small mt-1"><i class="bi bi-clock-history me-1"></i>All-time volume</div>
+            </div>
+            <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+                <i class="bi bi-file-earmark-text"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-sm-6">
+        <div class="stat-card d-flex align-items-center justify-content-between">
+            <div>
+                <div class="stat-label">Pending Approvals</div>
+                <div class="stat-val text-warning">{{ pending_approvals }}</div>
+                <div class="text-muted small mt-1"><i class="bi bi-person-exclamation me-1"></i>Awaiting signoff</div>
+            </div>
+            <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+                <i class="bi bi-hourglass-split"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-sm-6">
+        <div class="stat-card d-flex align-items-center justify-content-between">
+            <div>
+                <div class="stat-label">Executed Refunds</div>
+                <div class="stat-val text-success">${{ "%.2f"|format(total_refund_amount) }}</div>
+                <div class="text-muted small mt-1"><i class="bi bi-check-all me-1"></i>{{ refunded_count }} settled claims</div>
+            </div>
+            <div class="stat-icon bg-success bg-opacity-10 text-success">
+                <i class="bi bi-cash-coin"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-sm-6">
+        <div class="stat-card d-flex align-items-center justify-content-between">
+            <div>
+                <div class="stat-label">Rejected / Blocked</div>
+                <div class="stat-val text-danger">{{ rejected_count }}</div>
+                <div class="text-muted small mt-1"><i class="bi bi-shield-x me-1"></i>Tier decline limits</div>
+            </div>
+            <div class="stat-icon bg-danger bg-opacity-10 text-danger">
+                <i class="bi bi-slash-circle"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Row: Chart & Activity Feed -->
+<div class="row g-4 mb-4">
+    <!-- Risk Classification Chart -->
+    <div class="col-lg-5">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-pie-chart me-2 text-primary"></i>Risk Distribution (Governed Policy)</h6>
+            </div>
+            <div class="card-body d-flex flex-column align-items-center justify-content-center">
+                <div style="width: 250px; height: 250px; position: relative;">
+                    <canvas id="riskDonutChart"></canvas>
+                </div>
+                <div class="mt-3 w-100 px-3">
+                    <div class="d-flex justify-content-between small py-1 border-bottom">
+                        <span><i class="bi bi-circle-fill text-success me-1"></i> ROUTINE:</span>
+                        <strong>{{ risk_dist.ROUTINE }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between small py-1 border-bottom">
+                        <span><i class="bi bi-circle-fill text-primary me-1"></i> SINGLE_APPROVAL:</span>
+                        <strong>{{ risk_dist.SINGLE_APPROVAL }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between small py-1 border-bottom">
+                        <span><i class="bi bi-circle-fill text-warning me-1"></i> FOUR_EYES:</span>
+                        <strong>{{ risk_dist.FOUR_EYES }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between small py-1">
+                        <span><i class="bi bi-circle-fill text-danger me-1"></i> TIER_DECLINE:</span>
+                        <strong>{{ risk_dist.TIER_DECLINE }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Real-time Audit Ledger Activity -->
+    <div class="col-lg-7">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-journal-check me-2 text-primary"></i>Hash-Chained Audit Stream</h6>
+                <a href="{{ url_for('main.audit_page') }}" class="btn btn-sm btn-outline-primary">View Full Ledger</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table custom-table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Seq</th>
+                                <th>Action</th>
+                                <th>Claim ID</th>
+                                <th>Actor</th>
+                                <th>Amount</th>
+                                <th>Hash Block</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for act in recent_activities %}
+                            <tr>
+                                <td><span class="badge bg-light text-dark border">#{{ act.seq }}</span></td>
+                                <td>
+                                    {% if act.action == 'REFUND_EXECUTED' %}
+                                        <span class="badge bg-success">REFUND_EXECUTED</span>
+                                    {% elif 'APPROVAL' in act.action %}
+                                        <span class="badge bg-primary">{{ act.action }}</span>
+                                    {% elif act.action == 'CLAIM_REJECTED' %}
+                                        <span class="badge bg-danger">REJECTED</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ act.action }}</span>
+                                    {% endif %}
+                                </td>
+                                <td><a href="/claims/{{ act.claim_id }}" class="fw-semibold text-decoration-none">{{ act.claim_id }}</a></td>
+                                <td><small class="text-muted">{{ act.actor }}</small></td>
+                                <td><strong>${{ "%.2f"|format(act.amount) }}</strong></td>
+                                <td><span class="hash-pill" title="{{ act.curr_hash }}">{{ act.curr_hash[:16] }}...</span></td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="text-center py-4 text-muted">No recent ledger events recorded.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Claims Table -->
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-clock me-2 text-primary"></i>Recent Claims Queue</h6>
+        <a href="{{ url_for('main.claims_page') }}" class="btn btn-sm btn-primary">Manage All Claims</a>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table custom-table align-middle">
+                <thead>
+                    <tr>
+                        <th>Claim ID</th>
+                        <th>Customer</th>
+                        <th>Item Details</th>
+                        <th>Amount</th>
+                        <th>Risk Tier</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in claims %}
+                    <tr>
+                        <td>
+                            <a href="/claims/{{ c.id }}" class="fw-bold text-decoration-none text-primary">{{ c.id }}</a>
+                        </td>
+                        <td>
+                            <div class="fw-semibold">{{ c.customer_name }}</div>
+                            <small class="text-muted">{{ c.customer_email }}</small>
+                        </td>
+                        <td>
+                            <div>{{ c.item_name }}</div>
+                            <small class="badge bg-light text-dark border">{{ c.item_category }}</small>
+                        </td>
+                        <td><strong>${{ "%.2f"|format(c.amount) }}</strong></td>
+                        <td>
+                            {% if c.risk_category == 'ROUTINE' %}
+                                <span class="badge badge-routine">ROUTINE</span>
+                            {% elif c.risk_category == 'SINGLE_APPROVAL' %}
+                                <span class="badge badge-single">SINGLE_APPROVAL</span>
+                            {% elif c.risk_category == 'FOUR_EYES' %}
+                                <span class="badge badge-four-eyes">FOUR_EYES</span>
+                            {% else %}
+                                <span class="badge badge-tier-decline">TIER_DECLINE</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if c.status == 'REFUNDED' %}
+                                <span class="badge badge-refunded"><i class="bi bi-check-circle me-1"></i>REFUNDED</span>
+                            {% elif 'PENDING' in c.status %}
+                                <span class="badge badge-pending"><i class="bi bi-clock me-1"></i>{{ c.status }}</span>
+                            {% elif c.status == 'REJECTED' %}
+                                <span class="badge badge-rejected"><i class="bi bi-x-circle me-1"></i>REJECTED</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ c.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="/claims/{{ c.id }}" class="btn btn-sm btn-outline-secondary">Inspect</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const ctx = document.getElementById('riskDonutChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['ROUTINE', 'SINGLE_APPROVAL', 'FOUR_EYES', 'TIER_DECLINE'],
+                datasets: [{
+                    data: [
+                        {{ risk_dist.ROUTINE }},
+                        {{ risk_dist.SINGLE_APPROVAL }},
+                        {{ risk_dist.FOUR_EYES }},
+                        {{ risk_dist.TIER_DECLINE }}
+                    ],
+                    backgroundColor: ['#10b981', '#2563eb', '#f59e0b', '#ef4444'],
+                    borderWidth: 2,
+                    hoverOffset: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                cutout: '72%'
+            }
+        });
+    });
+</script>
+{% endblock %}
